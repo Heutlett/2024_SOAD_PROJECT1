@@ -116,12 +116,12 @@ namespace MyServiceApi.Services.MenuService
             return serverResponse;
         }
 
-        public Task<MealResponse> GenerateMealRecommendationExternal(MealRequest mealRequest)
+        public Task<ServerResponse<MealResponse>> GenerateMealRecommendationDynamic(MealRequest mealRequest)
         {
             throw new NotImplementedException();
         }
 
-        public Task<MealResponse> GenerateMealRecommendationNative(MealRequest mealRequest)
+        public Task<ServerResponse<MealResponse>> GenerateMealRecommendationLocal(MealRequest mealRequest)
         {
             throw new NotImplementedException();
         }

@@ -12,8 +12,10 @@ namespace MyServiceApi.Services.MenuService
 
         Task<ServerResponse<MealResponse?>> GenerateMealRecommendationAI(MealRequest mealRequest);
 
-        Task<MealResponse> GenerateMealRecommendationExternal(MealRequest mealRequest);
+        Task<ServerResponse<MealResponse>> GenerateMealRecommendationLocal(MealRequest mealRequest);
 
-        Task<MealResponse> GenerateMealRecommendationNative(MealRequest mealRequest);
+        Task<ServerResponse<MealResponse>> GenerateMealRecommendationDynamic(MealRequest mealRequest);
+
+
     }
 }
