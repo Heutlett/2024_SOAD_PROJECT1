@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace MyServiceApi.Models
 {
-    public class ServiceResponse<T>
+    public class ServerResponse<T>
     {
         public T? Data { get; set; }
 

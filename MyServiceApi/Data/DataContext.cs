@@ -9,6 +9,6 @@ public class DataContext : DbContext
         : base(options)
     {
     }
-
+    // Implementar sistema de parseo de meals desde json
     public DbSet<Meal> MealItems { get; set; }
 }

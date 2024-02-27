@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MyServiceApi.Data;
-using MyServiceApi.Services.MealService;
+using MyServiceApi.Services.MenuService;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +13,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddScoped<IMealService, MealService>();
+builder.Services.AddScoped<IMenuController, MenuController>();
 
 var app = builder.Build();
 

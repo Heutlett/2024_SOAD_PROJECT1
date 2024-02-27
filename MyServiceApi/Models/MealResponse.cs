@@ -7,6 +7,6 @@ namespace MyServiceApi.Models
 {
     public class MealResponse
     {
-
+        public List<Meal>? RecommendedMeals { get; set; }
     }
 }

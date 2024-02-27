@@ -8,5 +8,6 @@ namespace MyServiceApi.Models
     public class MealRequest
     {
         public Meal? Meal { get; set; }
+        public SourceType SourceType { get; set; }
     }
 }

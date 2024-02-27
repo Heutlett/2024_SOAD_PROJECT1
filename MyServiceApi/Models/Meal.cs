@@ -7,8 +7,7 @@ namespace MyServiceApi.Models
 {
     public class Meal
     {
-        public long Id { get; set; }
         public string? Name { get; set; }
-        public CourseType Course { get; set; }
+        public CourseType Course { get; set; } = CourseType.MainCourse;
     }
 }
