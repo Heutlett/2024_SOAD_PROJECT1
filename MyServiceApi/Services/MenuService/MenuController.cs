@@ -82,13 +82,34 @@ namespace MyServiceApi.Services.MenuService
                 {
                     client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
+                    string openaiSystemPrompt = @"You are a food recommendation system, there are 3 types 
+                        of food (MainCourse, Drink, Dessert), you will always have one type of food as input 
+                        {""Name"": name, ""CourseType"": courseType} and you must generate recommendations 
+                        for the OTHER TWO types as output: 
+                        { ""RecommendedMeals"": 
+                            [ 
+                                {""Name"" : ""name"", ""CourseType"": ""courseType""}, 
+                                {""Name"" : ""name"", ""CourseType"": ""courseType""} 
+                            ] 
+                        }, for example, if the CourseType input is MainCourse, you must generate Drink and 
+                        Dessert recommendations using the desired output format, dont use natural languaje 
+                        only use the format:
+                        { ""RecommendedMeals"": 
+                            [ 
+                                {""Name"" : ""name"" , ""CourseType"": ""courseType""}, 
+                                {""Name"" : ""name"", ""CourseType"": ""courseType""} 
+                            ] 
+                        }";
+
+                    string openaiUserPrompt = $"{{\"Name\": {mealRequest.Meal.Name}, \"CourseType\": {mealRequest.Meal.Course}}}";
+
                     var requestBody = new
                     {
                         model = "gpt-3.5-turbo",
                         messages = new[]
                         {
-                        new { role = "system", content = "You are a food recommendation system, there are 3 types of food (MainCourse, Drink, Dessert), you will always have one type of food as input {\"Name\": name, \"CourseType\": courseType} and you must generate recommendations for the OTHER TWO types as output: { \"RecommendedMeals\": [ {\"Name\" : \"name\" , \"CourseType\": \"courseType\"}, {\"Name\" : \"name\", \"CourseType\": \"courseType\"} ] }, for example, if the CourseType input is MainCourse, you must generate Drink and Dessert recommendations using the desired output format, dont use natural languaje only use the format { \"RecommendedMeals\": [ {\"Name\" : \"name\" , \"CourseType\": \"courseType\"}, {\"Name\" : \"name\", \"CourseType\": \"courseType\"} ] }" },
-                        new { role = "user", content = $"{{\"Name\": {mealRequest.Meal.Name}, \"CourseType\": {mealRequest.Meal.Course}}}" }
+                        new { role = "system", content =  openaiSystemPrompt},
+                        new { role = "user", content =  openaiUserPrompt}
                     }
                     };
 
