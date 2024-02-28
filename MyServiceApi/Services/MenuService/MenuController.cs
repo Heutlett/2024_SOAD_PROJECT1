@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
 using MyServiceApi.Data;
 using MyServiceApi.Models;
 using System.Text;
@@ -15,7 +10,6 @@ namespace MyServiceApi.Services.MenuService
     public class MenuController : IMenuController
     {
         private readonly DataContext _context;
-        static readonly HttpClient client = new HttpClient();
         public MenuController(DataContext context)
         {
             _context = context;
@@ -60,40 +54,45 @@ namespace MyServiceApi.Services.MenuService
             return serverResponse;
         }
 
-        public async Task<ServerResponse<MealResponse?>> GenerateMealRecommendationAI(MealRequest mealRequest)
+        private async Task<string> GetOpenAiResponse(MealRequest mealRequest)
         {
-            ServerResponse<MealResponse?> serverResponse = new();
+            // Construction of the OpenAI call
+            string apiKeyFilePath = "Keys/openai.key";
+            string apiKey = await File.ReadAllTextAsync(apiKeyFilePath);
 
-            try
-            {
-                // Verify if the meal in the mealRequest object is not null
-                if (mealRequest.Meal == null
-                        || mealRequest.Meal.Name == null
-                        || mealRequest.Meal.Course == null)
-                {
-                    throw new Exception("The Meal property of the mealRequest is invalid, please fill out all fields with correct data");
-                }
+            using HttpClient client = new();
+            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
-                // Construction of the OpenAI call
-                string apiKeyFilePath = "Keys/openai.key";
-                string apiKey = await File.ReadAllTextAsync(apiKeyFilePath);
+            string openaiSystemPrompt = @"You are a food recommendation system, there are 3 types 
+                        of food (MainCourse, Drink, Dessert), you will always have one or two type of food as input: 
+                        
+                        One food and type input:
+                        [ {""Name"": name, ""CourseType"": courseType} ]
 
-                using (HttpClient client = new HttpClient())
-                {
-                    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-
-                    string openaiSystemPrompt = @"You are a food recommendation system, there are 3 types 
-                        of food (MainCourse, Drink, Dessert), you will always have one type of food as input 
-                        {""Name"": name, ""CourseType"": courseType} and you must generate recommendations 
-                        for the OTHER TWO types as output: 
+                        Two food and type input:
+                        [ {""Name"": name, ""CourseType"": courseType}, ""Name"": name, ""CourseType"": courseType} ]
+                        
+                        And you must generate recommendations for the other type or types as output: 
+                        
+                        For one food type input:
                         { ""RecommendedMeals"": 
                             [ 
                                 {""Name"" : ""name"", ""CourseType"": ""courseType""}, 
                                 {""Name"" : ""name"", ""CourseType"": ""courseType""} 
                             ] 
-                        }, for example, if the CourseType input is MainCourse, you must generate Drink and 
+                        } 
+
+                        For two food type input:
+                        { ""RecommendedMeals"": 
+                            [ 
+                                {""Name"" : ""name"", ""CourseType"": ""courseType""}
+                            ] 
+                        } 
+                        
+                        For example, if the input have one CourseType like MainCourse, you must generate Drink and 
                         Dessert recommendations using the desired output format, dont use natural languaje 
                         only use the format:
+                        
                         { ""RecommendedMeals"": 
                             [ 
                                 {""Name"" : ""name"" , ""CourseType"": ""courseType""}, 
@@ -101,58 +100,70 @@ namespace MyServiceApi.Services.MenuService
                             ] 
                         }";
 
-                    string openaiUserPrompt = $"{{\"Name\": {mealRequest.Meal.Name}, \"CourseType\": {mealRequest.Meal.Course}}}";
+            string openaiUserPrompt;
 
-                    var requestBody = new
-                    {
-                        model = "gpt-3.5-turbo",
-                        messages = new[]
-                        {
+            if (mealRequest.Meals.Count == 1)
+                openaiUserPrompt = $"[{{\"Name\": {mealRequest.Meals[0].Name}, \"CourseType\": {mealRequest.Meals[0].Course}}}]";
+            else
+                openaiUserPrompt = $"[{{\"Name\": {mealRequest.Meals[0].Name}, \"CourseType\": {mealRequest.Meals[0].Course}}}, {{\"Name\": {mealRequest.Meals[1].Name}, \"CourseType\": {mealRequest.Meals[1].Course}}}]";
+
+            var requestBody = new
+            {
+                model = "gpt-3.5-turbo",
+                messages = new[]
+                {
                         new { role = "system", content =  openaiSystemPrompt},
                         new { role = "user", content =  openaiUserPrompt}
                     }
-                    };
+            };
 
-                    // Call OpenAI
-                    string jsonRequestBody = JsonConvert.SerializeObject(requestBody);
-                    var content = new StringContent(jsonRequestBody, Encoding.UTF8, "application/json");
-                    HttpResponseMessage response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
-                    string callResponse = await response.Content.ReadAsStringAsync();
+            // Call OpenAI
+            string jsonRequestBody = JsonConvert.SerializeObject(requestBody);
+            var content = new StringContent(jsonRequestBody, Encoding.UTF8, "application/json");
+            HttpResponseMessage response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+            string openaiResponse = await response.Content.ReadAsStringAsync();
 
-                    // Deserialize the message from OpenAI to extract only the response message
-                    ChatCompletion? chatCompletion = JsonConvert.DeserializeObject<ChatCompletion>(callResponse);
-                    if (chatCompletion == null
-                            || chatCompletion.Choices == null
-                            || chatCompletion.Choices[0] == null
-                            || chatCompletion.Choices[0].Message == null
-                            || chatCompletion.Choices[0].Message!.Content == null)
-                    {
-                        throw new Exception("An error occurred while getting the response from OpenAI");
-                    }
-                    string? deserializedResponse = chatCompletion.Choices[0].Message!.Content;
-                    if (deserializedResponse == null)
-                    {
-                        throw new Exception("An error occurred while getting the response from OpenAI");
-                    }
+            return openaiResponse;
+        }
 
-                    // Deserialize and convert the response message content from OpenAI to MealResponse object
-                    var options = new JsonSerializerOptions
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        Converters =
+        public async Task<ServerResponse<MealResponse?>> GenerateMealRecommendationAI(MealRequest mealRequest)
+        {
+            ServerResponse<MealResponse?> serverResponse = new();
+
+            try
+            {
+                string openaiResponse = await GetOpenAiResponse(mealRequest);
+
+                // Deserialize the message from OpenAI to extract only the response message
+                ChatCompletion? chatCompletion = JsonConvert.DeserializeObject<ChatCompletion>(openaiResponse);
+                if (chatCompletion == null
+                        || chatCompletion.Choices == null
+                        || chatCompletion.Choices[0] == null
+                        || chatCompletion.Choices[0].Message == null
+                        || chatCompletion.Choices[0].Message!.Content == null)
+                {
+                    throw new Exception("An error occurred while getting the response from OpenAI");
+                }
+                string? deserializedResponse = chatCompletion.Choices[0].Message!.Content ?? throw new Exception("An error occurred while getting the response from OpenAI");
+
+                // Parse the response message content from OpenAI to MealResponse object
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    Converters =
                     {
                         new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
                     }
-                    };
-                    MealResponse? mealResponse = System.Text.Json.JsonSerializer.Deserialize<MealResponse>(deserializedResponse, options);
-                    if (mealResponse == null || mealResponse.RecommendedMeals == null)
-                    {
-                        throw new Exception("An error occurred while deserializing the OpenAI response");
-                    }
+                };
 
-                    serverResponse.Success = true;
-                    serverResponse.Data = mealResponse;
-                }
+                MealResponse? mealResponse = System.Text.Json.JsonSerializer.Deserialize<MealResponse>(deserializedResponse, options);
+
+                if (mealResponse == null || mealResponse.RecommendedMeals == null)
+                    throw new Exception("An error occurred while deserializing the OpenAI response");
+
+
+                serverResponse.Success = true;
+                serverResponse.Data = mealResponse;
             }
             catch (Exception e)
             {

@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using MyServiceApi.Models;
 
 namespace MyServiceApi.Services.MenuService
@@ -15,7 +11,5 @@ namespace MyServiceApi.Services.MenuService
         Task<ServerResponse<MealResponse>> GenerateMealRecommendationLocal(MealRequest mealRequest);
 
         Task<ServerResponse<MealResponse>> GenerateMealRecommendationDynamic(MealRequest mealRequest);
-
-
     }
 }
