@@ -1,10 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
 using MyServiceApi.Data;
 using MyServiceApi.Models;
+using System.Text;
+using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MyServiceApi.Services.MenuService
 {
@@ -38,7 +37,7 @@ namespace MyServiceApi.Services.MenuService
                         }
 
                         serverResponse.Data = mealResponse.Data;
-                        serverResponse.Message = "This is a response from AI";
+                        serverResponse.Message = "This is a response from OpenAI";
                         break;
 
                     case SourceType.Dynamic: // Parte de PERSONA C
@@ -55,58 +54,116 @@ namespace MyServiceApi.Services.MenuService
             return serverResponse;
         }
 
+        private async Task<string> GetOpenAiResponse(MealRequest mealRequest)
+        {
+            // Construction of the OpenAI call
+            string apiKeyFilePath = "Keys/openai.key";
+            string apiKey = await File.ReadAllTextAsync(apiKeyFilePath);
+
+            using HttpClient client = new();
+            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+
+            string openaiSystemPrompt = @"You are a food recommendation system, there are 3 types 
+                        of food (MainCourse, Drink, Dessert), you will always have one or two type of food as input: 
+                        
+                        One food and type input:
+                        [ {""Name"": name, ""CourseType"": courseType} ]
+
+                        Two food and type input:
+                        [ {""Name"": name, ""CourseType"": courseType}, ""Name"": name, ""CourseType"": courseType} ]
+                        
+                        And you must generate recommendations for the other type or types as output: 
+                        
+                        For one food type input:
+                        { ""RecommendedMeals"": 
+                            [ 
+                                {""Name"" : ""name"", ""CourseType"": ""courseType""}, 
+                                {""Name"" : ""name"", ""CourseType"": ""courseType""} 
+                            ] 
+                        } 
+
+                        For two food type input:
+                        { ""RecommendedMeals"": 
+                            [ 
+                                {""Name"" : ""name"", ""CourseType"": ""courseType""}
+                            ] 
+                        } 
+                        
+                        For example, if the input have one CourseType like MainCourse, you must generate Drink and 
+                        Dessert recommendations using the desired output format, dont use natural languaje 
+                        only use the format:
+                        
+                        { ""RecommendedMeals"": 
+                            [ 
+                                {""Name"" : ""name"" , ""CourseType"": ""courseType""}, 
+                                {""Name"" : ""name"", ""CourseType"": ""courseType""} 
+                            ] 
+                        }";
+
+            string openaiUserPrompt;
+
+            if (mealRequest.Meals.Count == 1)
+                openaiUserPrompt = $"[{{\"Name\": {mealRequest.Meals[0].Name}, \"CourseType\": {mealRequest.Meals[0].Course}}}]";
+            else
+                openaiUserPrompt = $"[{{\"Name\": {mealRequest.Meals[0].Name}, \"CourseType\": {mealRequest.Meals[0].Course}}}, {{\"Name\": {mealRequest.Meals[1].Name}, \"CourseType\": {mealRequest.Meals[1].Course}}}]";
+
+            var requestBody = new
+            {
+                model = "gpt-3.5-turbo",
+                messages = new[]
+                {
+                        new { role = "system", content =  openaiSystemPrompt},
+                        new { role = "user", content =  openaiUserPrompt}
+                    }
+            };
+
+            // Call OpenAI
+            string jsonRequestBody = JsonConvert.SerializeObject(requestBody);
+            var content = new StringContent(jsonRequestBody, Encoding.UTF8, "application/json");
+            HttpResponseMessage response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+            string openaiResponse = await response.Content.ReadAsStringAsync();
+
+            return openaiResponse;
+        }
+
         public async Task<ServerResponse<MealResponse?>> GenerateMealRecommendationAI(MealRequest mealRequest)
         {
             ServerResponse<MealResponse?> serverResponse = new();
 
             try
             {
-                if (mealRequest.Meal == null)
+                string openaiResponse = await GetOpenAiResponse(mealRequest);
+
+                // Deserialize the message from OpenAI to extract only the response message
+                ChatCompletion? chatCompletion = JsonConvert.DeserializeObject<ChatCompletion>(openaiResponse);
+                if (chatCompletion == null
+                        || chatCompletion.Choices == null
+                        || chatCompletion.Choices[0] == null
+                        || chatCompletion.Choices[0].Message == null
+                        || chatCompletion.Choices[0].Message!.Content == null)
                 {
-                    throw new Exception("The Meal property of the request is empty");
+                    throw new Exception("An error occurred while getting the response from OpenAI");
                 }
+                string? deserializedResponse = chatCompletion.Choices[0].Message!.Content ?? throw new Exception("An error occurred while getting the response from OpenAI");
 
-                switch (mealRequest.Meal.Course)
+                // Parse the response message content from OpenAI to MealResponse object
+                var options = new JsonSerializerOptions
                 {
-                    case CourseType.MainCourse:
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    Converters =
+                    {
+                        new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
+                    }
+                };
 
-                        serverResponse.Data = new MealResponse
-                        {
-                            RecommendedMeals =
-                                [
-                                    new Meal { Name = "Coca Cola", Course = CourseType.Drink },
-                                    new Meal { Name = "Ice cream", Course = CourseType.Dessert }
-                                ]
-                        };
+                MealResponse? mealResponse = System.Text.Json.JsonSerializer.Deserialize<MealResponse>(deserializedResponse, options);
 
-                        break;
+                if (mealResponse == null || mealResponse.RecommendedMeals == null)
+                    throw new Exception("An error occurred while deserializing the OpenAI response");
 
-                    case CourseType.Drink:
 
-                        serverResponse.Data = new MealResponse
-                        {
-                            RecommendedMeals =
-                                [
-                                    new Meal { Name = "Pizza", Course = CourseType.MainCourse },
-                                    new Meal { Name = "Ice cream", Course = CourseType.Dessert }
-                                ]
-                        };
-
-                        break;
-
-                    case CourseType.Dessert:
-
-                        serverResponse.Data = new MealResponse
-                        {
-                            RecommendedMeals =
-                                [
-                                    new Meal { Name = "Pizza", Course = CourseType.MainCourse },
-                                    new Meal { Name = "Coca Cola", Course = CourseType.Drink }
-                                ]
-                        };
-
-                        break;
-                }
+                serverResponse.Success = true;
+                serverResponse.Data = mealResponse;
             }
             catch (Exception e)
             {
