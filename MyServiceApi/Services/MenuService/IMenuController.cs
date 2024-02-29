@@ -8,7 +8,7 @@ namespace MyServiceApi.Services.MenuService
 
         Task<ServerResponse<MealResponse?>> GenerateMealRecommendationAI(MealRequest mealRequest);
 
-        Task<ServerResponse<MealResponse>> GenerateMealRecommendationLocal(MealRequest mealRequest);
+        ServerResponse<MealResponse> GenerateMealRecommendationLocal(MealRequest mealRequest);
 
         Task<ServerResponse<MealResponse>> GenerateMealRecommendationDynamic(MealRequest mealRequest);
     }

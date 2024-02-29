@@ -9,11 +9,6 @@ namespace MyServiceApi.Services.MenuService
 {
     public class MenuController : IMenuController
     {
-        private readonly DataContext _context;
-        public MenuController(DataContext context)
-        {
-            _context = context;
-        }
 
         public async Task<ServerResponse<MealResponse>> GenerateMealRecommendation(MealRequest mealRequest)
         {
@@ -24,7 +19,13 @@ namespace MyServiceApi.Services.MenuService
                 switch (mealRequest.SourceType)
                 {
                     case SourceType.Local: // Parte de PERSONA A
-                        serverResponse.Success = true;
+                        ServerResponse<MealResponse> mealResponseLocal = GenerateMealRecommendationLocal(mealRequest);
+                        if (!mealResponseLocal.Success)
+                        {
+                            throw new Exception(mealResponseLocal.Message);
+                        }
+
+                        serverResponse.Data = mealResponseLocal.Data;
                         serverResponse.Message = "This is a response from local";
                         break;
 
@@ -178,9 +179,45 @@ namespace MyServiceApi.Services.MenuService
             throw new NotImplementedException();
         }
 
-        public Task<ServerResponse<MealResponse>> GenerateMealRecommendationLocal(MealRequest mealRequest)
+        //Get the local data for response
+        private string GetLocalResponse(MealRequest mealRequest)
         {
-            throw new NotImplementedException();
+            DataContext localData = new DataContext();
+            string localAnswer = localData.GetMissingRecommendations(mealRequest);
+            return localAnswer;
+        }
+
+        public ServerResponse<MealResponse> GenerateMealRecommendationLocal(MealRequest mealRequest)
+        {
+            ServerResponse<MealResponse> serverResponse = new();
+            try
+            {
+                string localResponse = GetLocalResponse(mealRequest);
+                // Parse the response message content from LocalResponse to MealResponse object
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    Converters =
+                    {
+                        new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
+                    }
+                };
+
+                MealResponse? mealResponse = System.Text.Json.JsonSerializer.Deserialize<MealResponse>(localResponse, options);
+
+                if (mealResponse == null || mealResponse.RecommendedMeals == null)
+                    throw new Exception("An error occurred while deserializing the OpenAI response");
+
+
+                serverResponse.Success = true;
+                serverResponse.Data = mealResponse;
+            }
+            catch (Exception e)
+            {
+                serverResponse.Success = false;
+                serverResponse.Message = e.Message;
+            }
+            return serverResponse;
         }
     }
 }
