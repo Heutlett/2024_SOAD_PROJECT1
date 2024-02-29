@@ -9,6 +9,7 @@ namespace MyServiceApi.Services.MenuService
 {
     public class MenuController : IMenuController
     {
+        DataContext dataContext = new DataContext();
 
         public async Task<ServerResponse<MealResponse>> GenerateMealRecommendation(MealRequest mealRequest)
         {
@@ -42,6 +43,14 @@ namespace MyServiceApi.Services.MenuService
                         break;
 
                     case SourceType.Dynamic: // Parte de PERSONA C
+                        ServerResponse<MealResponse> mealResponseDynamic = await GenerateMealRecommendationDynamic(mealRequest);
+                        
+                        if (!mealResponseDynamic.Success)
+                        {
+                            throw new Exception(mealResponseDynamic.Message);
+                        }
+
+                        serverResponse.Data = mealResponseDynamic.Data;
                         serverResponse.Message = "This is a response from dynamic";
                         break;
                 }
@@ -55,6 +64,7 @@ namespace MyServiceApi.Services.MenuService
             return serverResponse;
         }
 
+        // Call OpenAI for AI method
         private async Task<string> GetOpenAiResponse(MealRequest mealRequest)
         {
             // Construction of the OpenAI call
@@ -174,16 +184,61 @@ namespace MyServiceApi.Services.MenuService
             return serverResponse;
         }
 
-        public Task<ServerResponse<MealResponse>> GenerateMealRecommendationDynamic(MealRequest mealRequest)
+        // Call external API for dynamic method.
+        private async Task<string> CallExternalApi(MealRequest mealRequest)
         {
-            throw new NotImplementedException();
+            try
+            {
+                using HttpClient client = new HttpClient();
+                string url = "http://soa41d-project1.eastus.azurecontainer.io/recommendation/custom/?meal=tacos%20al%20pastor";
+                HttpResponseMessage response = await client.GetAsync(url);
+                return await response.Content.ReadAsStringAsync();
+            }
+            catch (Exception e)
+            {
+                throw new Exception(e.Message);
+            }
         }
 
-        //Get the local data for response
+        public async Task<ServerResponse<MealResponse>> GenerateMealRecommendationDynamic(MealRequest mealRequest)
+        {
+            ServerResponse<MealResponse> serverResponse = new();
+            MealResponse mealResponse = new();
+
+            try
+            {
+                // Call external API
+                string externalResponse = await CallExternalApi(mealRequest);
+            
+                // Parse response message 
+                JsonDocument document = JsonDocument.Parse(externalResponse);
+                JsonElement root = document.RootElement;
+                string meal = root.GetProperty("meal").GetString();
+                string drink = root.GetProperty("drink").GetString();
+                string dessert = root.GetProperty("dessert").GetString();
+
+                // Generate MealResponse object and add data from external API
+                mealResponse.RecommendedMeals = new List<Meal>();
+                mealResponse.RecommendedMeals.Add(new Meal { Name = meal, Course = CourseType.MainCourse });
+                mealResponse.RecommendedMeals.Add(new Meal { Name = drink, Course = CourseType.Drink });
+                mealResponse.RecommendedMeals.Add(new Meal { Name = dessert, Course = CourseType.Dessert });
+            
+            }catch(Exception e){
+
+                serverResponse.Success = false;
+                serverResponse.Message = e.Message;
+                throw new Exception(e.Message);
+            }
+            
+            serverResponse.Data = mealResponse;
+            serverResponse.Success = true;
+            return serverResponse;
+        }
+
+        // Get the local data for response
         private string GetLocalResponse(MealRequest mealRequest)
         {
-            DataContext localData = new DataContext();
-            string localAnswer = localData.GetMissingRecommendations(mealRequest);
+            string localAnswer = dataContext.GetMissingRecommendations(mealRequest);
             return localAnswer;
         }
 
