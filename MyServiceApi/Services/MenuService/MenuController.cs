@@ -184,20 +184,47 @@ namespace MyServiceApi.Services.MenuService
             return serverResponse;
         }
 
-        // Call external API for dynamic method.
+
+        private string TranslateCourseToExternalApiFormat(CourseType? course){
+            switch(course){
+                case CourseType.MainCourse:
+                    return "meal";
+                case CourseType.Drink:
+                    return "drink";
+                case CourseType.Dessert:
+                    return "dessert";
+                default:
+                    return ""; // in case the course is empty
+            }
+        }
+
         private async Task<string> CallExternalApi(MealRequest mealRequest)
         {
-            try
+            ServerResponse<MealResponse> serverResponse = new();
+            MealResponse mealResponse = new();
+            string url = "http://soa41d-project1.eastus.azurecontainer.io/recommendation/custom/?";
+            url += TranslateCourseToExternalApiFormat(mealRequest.Meals[0].Course);
+            url += "=";
+            url += mealRequest.Meals[0].Name.Replace(" ", "%20");
+
+            if (mealRequest.Meals.Count > 1 && mealRequest.Meals[1].Name != null)
             {
-                using HttpClient client = new HttpClient();
-                string url = "http://soa41d-project1.eastus.azurecontainer.io/recommendation/custom/?meal=tacos%20al%20pastor";
-                HttpResponseMessage response = await client.GetAsync(url);
-                return await response.Content.ReadAsStringAsync();
+                url += "&";
+                url += TranslateCourseToExternalApiFormat(mealRequest.Meals[1].Course);
+                url += "=";
+                url += mealRequest.Meals[1].Name.Replace(" ", "%20");
             }
-            catch (Exception e)
+
+            using HttpClient client = new HttpClient();
+            HttpResponseMessage response = await client.GetAsync(url);
+
+            if (!response.IsSuccessStatusCode)
             {
-                throw new Exception(e.Message);
+                 
+                throw new Exception(response.ToString());
             }
+
+            return await response.Content.ReadAsStringAsync();
         }
 
         public async Task<ServerResponse<MealResponse>> GenerateMealRecommendationDynamic(MealRequest mealRequest)
